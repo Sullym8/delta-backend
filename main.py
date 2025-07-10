@@ -1,9 +1,21 @@
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import httpx
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Supabase configuration
+SUPABASE_URL = os.getenv("DELTA_SUPABASE_URL", "your-supabase-url")
+SUPABASE_KEY = os.getenv("DELTA_SUPABASE_KEY", "your-supabase-anon-key")
+
+# Initialize Supabase client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Country code mapping
 COUNTRY_CODE_MAP = {
@@ -123,6 +135,7 @@ class Race(BaseModel):
     country: str
     countryCode: str
     date: str
+    year: int
 
 
 class DriverColors(BaseModel):
@@ -261,7 +274,8 @@ def transform_ergast_race_to_race(ergast_race: ErgastRace, index: int) -> Race:
         circuit=ergast_race.Circuit.circuitName,
         country=ergast_race.Circuit.Location.country,
         countryCode=get_country_code(ergast_race.Circuit.Location.country),
-        date=ergast_race.date,
+        date=ergast_race.date + "T" + ergast_race.time,
+        year=int(ergast_race.season),
     )
 
 async def fetch_drivers_from_ergast(year: int = None) -> List[Driver]:
@@ -337,6 +351,12 @@ async def get_drivers(year: Optional[int] = None):
     drivers = await fetch_drivers_from_ergast(year)
     return drivers
 
+@app.get("/api/drivers/images")
+async def get_driver_images():
+    drivers = await fetch_drivers_from_ergast()
+    return {driver.driverCode: driver.driverImage for driver in drivers if driver.driverImage}
+
+
 @app.get("/api/races/upto", response_model =List[Race])
 async def get_upto_next_races(): 
     """
@@ -344,7 +364,7 @@ async def get_upto_next_races():
     """
 
     races = await get_races()
-    current_date = datetime.now()
+    current_date = datetime.now(timezone.utc)
     added = False
     output = []
 
