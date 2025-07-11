@@ -43,88 +43,7 @@ COUNTRY_CODE_MAP = {
     "USA": "us",
 }
 
-DRIVER_TEAM_MAP = {
-    "ALB": "Williams Racing",
-    "SAI": "Williams Racing", 
-    "VER": "Red Bull Racing",
-    "TSU": "Red Bull Racing",
-    "HAM": "Ferrari",
-    "LEC": "Ferrari",
-    "NOR": "McLaren Racing",
-    "PIA": "McLaren Racing",
-    "RUS": "Mercedes",
-    "ANT": "Mercedes",
-    "ALO": "Aston Martin",
-    "STR": "Aston Martin",
-    "BEA": "Haas F1 Team",
-    "OCO": "Haas F1 Team",
-    "GAS": "Alpine F1 Team",
-    "COL": "Alpine F1 Team",
-    "HAD": "RB F1 Team",
-    "LAW": "RB F1 Team",
-    "BOR": "Kick Sauber",
-    "HUL": "Kick Sauber", 
-}
 
-TEAM_COLORS = {
-    "Williams Racing": {
-        "main": "#041E42",
-        "accent": "#FFFFFF",
-    },
-    "Red Bull Racing": {
-        "main": "#001526",
-        "accent": "#0073D0",
-    },
-    "Ferrari": {
-        "main": "#B41726",
-        "accent": "#FFFFFF",
-        "secondary": "#B41726"
-    },
-    "McLaren Racing": {
-        "main": "#DE6A10",
-        "accent": "#000000",
-        "secondary": "#FF8700"
-    },
-    "Mercedes": {
-        "main": "#00d7b7",
-        "accent": "#000000",
-        "secondary": "#FFFFFF"
-    },
-    "Aston Martin": {
-        "main": "#0A5A4F",
-        "accent": "#CEDC00",
-    },
-    "Haas F1 Team": {
-        "main": "#000",
-        "accent": "#D92A1C",
-        "secondary": "#FFFFFF"
-    },
-    "Alpine F1 Team": {
-        "main": "#061A4D",
-        "accent": "#FF87BC",
-    },
-    "RB F1 Team": {
-        "main": "#1433C9",
-        "accent": "#FFFFFF",
-    },
-    "Kick Sauber": {
-        "main": "#07C00F",
-        "accent": "#00000",
-    }
-}
-
-TEAM_IMAGES = {
-    "Williams Racing": "src/assets/williams.avif",
-    "Red Bull Racing": "src/assets/redbull.avif",
-    "Ferrari": "src/assets/ferrari.avif",
-    "McLaren Racing": "src/assets/mclaren.avif",
-    "Mercedes": "src/assets/mercedes.avif",
-    "Aston Martin": "src/assets/aston_martin.avif",
-    "Haas F1 Team": "src/assets/haas.avif",
-    "Alpine F1 Team": "src/assets/alpine.avif",
-    "RB F1 Team": "src/assets/vcarb.avif",
-    "Kick Sauber": "src/assets/kick_sauber.avif"
-}
 
 # Pydantic models
 class Race(BaseModel):
@@ -185,26 +104,7 @@ class ErgastMRData(BaseModel):
 class ErgastResponse(BaseModel):
     MRData: ErgastMRData
 
-# Driver API models
-class ErgastDriver(BaseModel):
-    driverId: str
-    permanentNumber: str
-    code: str
-    url: str
-    givenName: str
-    familyName: str
-    dateOfBirth: str
-    nationality: str
 
-class ErgastDriverTable(BaseModel):
-    season: str
-    Drivers: List[ErgastDriver]
-
-class ErgastDriverMRData(BaseModel):
-    DriverTable: ErgastDriverTable
-
-class ErgastDriverResponse(BaseModel):
-    MRData: ErgastDriverMRData
 
 app = FastAPI(title = "Delta F1 API", version= "1.0.0")
 
@@ -225,42 +125,9 @@ def get_country_code(country: str) -> str:
     """Get country code from country name"""
     return COUNTRY_CODE_MAP.get(country, "F1")
 
-def get_driver_image_url(driver_code: str, given_name: str, family_name: str) -> str:
-    """Generate F1 official driver image URL"""
-    # F1 official image pattern
-    first_name_initials = given_name[:3].upper()
-    last_name_initials = family_name[:3].upper()
-    driver_id = f"{first_name_initials}{last_name_initials}01"
-    
-    # Official F1 media URL pattern
-    return f"https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/{given_name[0].upper()}/{driver_id}_{given_name}_{family_name}/{driver_id.lower()}.png"
 
-def transform_ergast_driver_to_driver(ergast_driver: ErgastDriver) -> Driver:
-    """Transform Ergast API driver data to our Driver model"""
-    driver_code = ergast_driver.code
-    team_name = DRIVER_TEAM_MAP.get(driver_code)
-    
-    # Get colors for the team
-    team_colors = TEAM_COLORS.get(team_name, {
-        "main": "#FFFFFF",
-        "accent": "#000000",
-        "secondary": "#808080"
-    })
-    
-    # Get cost (with some randomness for deltaCost)
-    base_cost = 30.0
-    delta_cost = round((hash(driver_code) % 21 - 10) / 10, 1)  # Random delta between -1.0 and 1.0
-    
-    return Driver(
-        driverCode=driver_code,
-        cost=base_cost,
-        driverName=f"{ergast_driver.givenName} {ergast_driver.familyName}",
-        teamName=team_name,
-        deltaCost=delta_cost,
-        driverImage=get_driver_image_url(driver_code, ergast_driver.givenName, ergast_driver.familyName),
-        teamImage=TEAM_IMAGES.get(team_name, "/assets/default.avif"),
-        colors=DriverColors(**team_colors)
-    )
+
+
 
 def transform_ergast_race_to_race(ergast_race: ErgastRace, index: int) -> Race:
     """Transform Ergast API race data to our Race model"""
@@ -274,38 +141,45 @@ def transform_ergast_race_to_race(ergast_race: ErgastRace, index: int) -> Race:
         circuit=ergast_race.Circuit.circuitName,
         country=ergast_race.Circuit.Location.country,
         countryCode=get_country_code(ergast_race.Circuit.Location.country),
-        date=ergast_race.date + "T" + ergast_race.time,
+        date=ergast_race.date + "T" + (ergast_race.time if ergast_race.time is not None else "00:00:00"),
         year=int(ergast_race.season),
     )
 
-async def fetch_drivers_from_ergast(year: int = None) -> List[Driver]:
-    """Fetch drivers from Ergast API"""
-    if year is None:
-        year = datetime.now().year
-    
-    url = f"https://api.jolpi.ca/ergast/f1/{year}/drivers.json"
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, timeout=10.0)
-            response.raise_for_status()
+async def fetch_drivers_from_supabase() -> List[Driver]:
+    """Fetch drivers from Supabase database"""
+    try:
+        # Query the drivers table
+        response = supabase.table('drivers').select('*').execute()
+        
+        drivers = []
+        for driver_data in response.data:
+            # Create DriverColors object
+            colors = DriverColors(
+                main=driver_data['color_main'],
+                accent=driver_data['color_accent'],
+                secondary=driver_data.get('color_secondary')
+            )
             
-            ergast_data = ErgastDriverResponse(**response.json())
-            drivers = [
-                transform_ergast_driver_to_driver(driver) 
-                for driver in ergast_data.MRData.DriverTable.Drivers
-                if driver.code in DRIVER_TEAM_MAP
-            ]
-            
-            return drivers
-            
-        except httpx.HTTPError as e:
-            raise HTTPException(status_code=503, detail=f"Failed to fetch drivers from Ergast API: {str(e)}")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error processing driver data: {str(e)}")
+            # Create Driver object
+            driver = Driver(
+                driverCode=driver_data['driver_code'],
+                cost=float(driver_data['cost']),
+                driverName=driver_data['driver_name'],
+                teamName=driver_data['team_name'],
+                deltaCost=float(driver_data['delta_cost']),
+                driverImage=driver_data.get('driver_image', ''),
+                teamImage=driver_data.get('team_image', ''),
+                colors=colors
+            )
+            drivers.append(driver)
+        
+        return drivers
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching drivers from database: {str(e)}")
 
 
-async def fetch_races_from_ergast(year: int = None) -> List[Race]:
+async def fetch_races_from_ergast(year: int | None = None) -> List[Race]:
     """Fetch races from Ergast API"""
     if year is None:
         year = datetime.now().year
@@ -342,18 +216,16 @@ async def get_races(year: Optional[int] = None):
 
 # Driver endpoint
 @app.get("/api/drivers", response_model=List[Driver])
-async def get_drivers(year: Optional[int] = None):
+async def get_drivers():
     """
-    Get F1 drivers for the specified year (defaults to current year)
-    
-    - **year**: Year to get drivers for (optional, defaults to current year)
+    Get F1 drivers from the database
     """
-    drivers = await fetch_drivers_from_ergast(year)
+    drivers = await fetch_drivers_from_supabase()
     return drivers
 
 @app.get("/api/drivers/images")
 async def get_driver_images():
-    drivers = await fetch_drivers_from_ergast()
+    drivers = await fetch_drivers_from_supabase()
     return {driver.driverCode: driver.driverImage for driver in drivers if driver.driverImage}
 
 
